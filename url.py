@@ -18,10 +18,15 @@ class URL:
 
     def __init__(self, url):
         try:
+            self.is_view_source = False
             self.scheme, url = self.split_on_scheme(url)
+            
             if self.scheme == 'data':
                 self.data = url
                 return
+            elif self.scheme == "view-source":
+                self.is_view_source = True
+                self.scheme, url = self.split_on_scheme(url)
 
             if "/" not in url:
                 url = url + "/"
@@ -109,7 +114,7 @@ class URL:
         scheme, rest = url_str.split(":", 1)
         assert scheme in self.SUPPORTED_SCHEME_PORTS
 
-        if not scheme == 'data':
+        if not scheme in ['data', 'view-source']:
             rest = rest[2:]
 
         return scheme, rest

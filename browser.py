@@ -25,7 +25,10 @@ def show(body):
 
 def load(url):
     body = url.request()
-    show(body)
+    if url.is_view_source:
+        print(body)
+    else:
+        show(body)
 
 def get_url_arg():
     if len(sys.argv) > 1:
