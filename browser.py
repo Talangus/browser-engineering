@@ -1,3 +1,5 @@
+import sys
+
 from url import URL
 
 def show(body):
@@ -14,6 +16,16 @@ def load(url):
     body = url.request()
     show(body)
 
+def get_url_arg():
+    if len(sys.argv) > 1:
+        return sys.argv[1]
+    else:
+        # return URL.DEFAULT_FILE_PATH
+        return 'data:text/html;base64,PGgxPkhlbGxvIFdvcmxkPC9oMT4='
+        # return 'https://browser.engineering/http.html'
+
 if __name__ == "__main__":
-    import sys
-    load(URL(sys.argv[1]))
+    
+    url_arg = get_url_arg()
+    url = URL(url_arg)
+    load(url)
