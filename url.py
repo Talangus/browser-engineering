@@ -5,6 +5,7 @@ import base64
 
 import wbetools
 import utils
+from socket_manager import socket_manager
 class URL:
     DEFAULT_FILE_PATH="file:///Users/li016390/test.html"
     SUPPORTED_SCHEME_PORTS={
@@ -57,52 +58,43 @@ class URL:
                 content = self.process_data_scheme(self.data)
                 return content
 
-        s = socket.socket(
-            family=socket.AF_INET,
-            type=socket.SOCK_STREAM,
-            proto=socket.IPPROTO_TCP,
-        )
-        s.connect((self.host, self.port))
+        s = socket_manager.get_socket(self.host, self.port, self.scheme)
     
-        if self.scheme == "https":
-            ctx = ssl.create_default_context()
-            s = ctx.wrap_socket(s, server_hostname=self.host)
-
         request = "GET {} HTTP/1.1\r\n".format(self.path)
         request += self.get_req_headers_string()
         request += "\r\n"
 
         s.send(request.encode("utf8"))
-        response = s.makefile("r", encoding="utf8", newline="\r\n")
+        response = s.makefile("rb")
     
-        statusline = response.readline()
+        statusline = response.readline().decode('utf-8').strip()
         version, status, explanation = statusline.split(" ", 2)
     
         response_headers = {}
         while True:
-            line = response.readline()
-            if line == "\r\n": break
+            line = response.readline().decode('utf-8').strip()
+            if not line: break
             header, value = line.split(":", 1)
-            response_headers[header.casefold()] = value.strip()
+            response_headers[header.casefold()] = value
     
         assert "transfer-encoding" not in response_headers
         assert "content-encoding" not in response_headers
-    
-        content = response.read()
-        s.close()
+
+        content_length = int(response_headers.get("content-length", 0))
+        content = response.read(content_length).decode('utf-8')
     
         return content
 
     def get_req_headers_string(self):
         headers = ""
-        for key,value in self.get_headers().items():
+        for key,value in self.get_req_headers().items():
             headers += "{}: {}\r\n".format(key, value)
         return headers
     
-    def get_headers(self):
+    def get_req_headers(self):
         return {
             "Host": self.host,
-            "Connection": "close",
+            "Connection": "keep-alive",
             "User-Agent":"Tal_browser",
             "Accept": "*/*"
         }

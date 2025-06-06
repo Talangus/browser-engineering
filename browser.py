@@ -2,7 +2,7 @@ import sys
 
 import utils
 from url import URL
-
+from socket_manager import socket_manager
 
 def show(body):
     in_tag = False
@@ -35,7 +35,7 @@ def get_url_arg():
         return sys.argv[1]
     else:
         # return URL.DEFAULT_FILE_PATH
-        # return 'data:text/html;base64,PGgxPkhlbGxvIFdvcmxkPC9oMT4='
+        # return 'https://google.com'
         return 'https://browser.engineering/http.html'
 
 if __name__ == "__main__":
@@ -43,3 +43,5 @@ if __name__ == "__main__":
     url_arg = get_url_arg()
     url = URL(url_arg)
     load(url)
+    load(url)
+    socket_manager.close()
