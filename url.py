@@ -3,7 +3,6 @@ import ssl
 import re
 import base64
 
-import wbetools
 import utils
 from socket_manager import socket_manager
 class URL:
@@ -16,10 +15,12 @@ class URL:
         "view-source": None
         }
     DATA_URL_TYPES=["text"]
+    MAX_REDIR_COUNT=5
 
     def __init__(self, url):
         try:
             self.is_view_source = False
+            self.redirect_count = 0
             self.scheme, url = self.split_on_scheme(url)
             
             if self.scheme == 'data':
@@ -75,10 +76,13 @@ class URL:
             line = response.readline().decode('utf-8').strip()
             if not line: break
             header, value = line.split(":", 1)
-            response_headers[header.casefold()] = value
+            response_headers[header.casefold()] = value.strip()
     
         assert "transfer-encoding" not in response_headers
         assert "content-encoding" not in response_headers
+
+        if self.is_redirect_status(status):
+            return self.get_redir_content(response_headers)
 
         content_length = int(response_headers.get("content-length", 0))
         content = response.read(content_length).decode('utf-8')
@@ -137,7 +141,31 @@ class URL:
 
         return data
     
-    @wbetools.js_hide
+    def get_redir_content(self, response_headers):
+        if "location" not in response_headers:
+            raise Exception("Missing location header in 300 response")
+
+        self.redirect_count += 1
+        if self.redirect_count > self.MAX_REDIR_COUNT:
+            raise Exception("Too many redirects")
+
+        location = response_headers["location"]
+        if self.is_relative_location(location):
+            self.path = location
+            return self.request()
+        else:
+            new_url = URL(location)
+            new_url.redirect_count = self.redirect_count
+            return new_url.request()
+
+    @staticmethod
+    def is_redirect_status(status):
+        return status.startswith('3')
+
+    @staticmethod
+    def is_relative_location(location):
+        return location.startswith('/')
+
     def __repr__(self):
         return "URL(scheme={}, host={}, port={}, path={!r})".format(
             self.scheme, self.host, self.port, self.path)

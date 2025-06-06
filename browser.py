@@ -36,12 +36,11 @@ def get_url_arg():
     else:
         # return URL.DEFAULT_FILE_PATH
         # return 'https://google.com'
-        return 'https://browser.engineering/http.html'
+        return 'http://browser.engineering/redirect3'
 
 if __name__ == "__main__":
     
     url_arg = get_url_arg()
     url = URL(url_arg)
-    load(url)
     load(url)
     socket_manager.close()
