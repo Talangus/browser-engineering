@@ -35,8 +35,8 @@ def get_url_arg():
         return sys.argv[1]
     else:
         # return URL.DEFAULT_FILE_PATH
-        # return 'https://google.com'
-        return 'http://browser.engineering/redirect3'
+        return 'https://google.com'
+        # return 'http://browser.engineering/redirect3'
 
 if __name__ == "__main__":
     

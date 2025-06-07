@@ -2,6 +2,8 @@ import socket
 import ssl
 import re
 import base64
+import gzip
+
 
 import utils
 from socket_manager import socket_manager
@@ -83,14 +85,26 @@ class URL:
             header, value = line.split(":", 1)
             response_headers[header.casefold()] = value.strip()
     
-        assert "transfer-encoding" not in response_headers
-        assert "content-encoding" not in response_headers
-
         if self.is_redirect_status(status):
             return self.get_redir_content(response_headers)
+        
+        transfer_encoding = response_headers.get("transfer-encoding", "").casefold()
+        content_encoding = response_headers.get("content-encoding", "").casefold()
 
-        content_length = int(response_headers.get("content-length", 0))
-        content = response.read(content_length).decode('utf-8')
+        if transfer_encoding == "chunked":
+            content = self.read_chunked_body(response)
+        else:
+            content_length = int(response_headers.get("content-length", 0))
+            content = response.read(content_length)
+
+        if content_encoding == "gzip":
+            content = gzip.decompress(content)
+
+        try:
+            content = content.decode("utf-8")
+        except UnicodeDecodeError:
+            pass
+
         max_age =self.get_max_age(response_headers)
         if max_age:
             cache.set(str(self), content,  max_age)
@@ -108,7 +122,8 @@ class URL:
             "Host": self.host,
             "Connection": "keep-alive",
             "User-Agent":"Tal_browser",
-            "Accept": "*/*"
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip"
         }
     
     def need_socket(self):
@@ -168,6 +183,23 @@ class URL:
             new_url = URL(location)
             new_url.redirect_count = self.redirect_count
             return new_url.request()
+
+    def read_chunked_body(self, response):
+        chunks = []
+        while True:
+            line = response.readline().decode("utf-8").strip()
+            if not line:
+                break
+            
+            chunk_size = int(line, 16)  
+            if chunk_size == 0:
+                break  
+            
+            chunk = response.read(chunk_size)
+            chunks.append(chunk)
+            response.read(2)
+
+        return b"".join(chunks)
 
     @staticmethod
     def is_redirect_status(status):
