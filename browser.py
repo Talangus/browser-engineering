@@ -29,7 +29,7 @@ def lex(body):
             text += c
     return text
 
-def layout(text):
+def layout(text, width=WIDTH):
     display_list = []
     cursor_x, cursor_y = HSTEP, VSTEP
     for c in text:
@@ -39,7 +39,7 @@ def layout(text):
         else:
             display_list.append((cursor_x, cursor_y, c))
             cursor_x += HSTEP
-            if cursor_x >= WIDTH - HSTEP:
+            if cursor_x >= width - HSTEP:
                 cursor_y += VSTEP
                 cursor_x = HSTEP
     return display_list
@@ -53,31 +53,36 @@ class Browser:
             height=HEIGHT
         )
 
-        self.canvas.pack()
+        self.canvas.pack(fill=tkinter.BOTH, expand=True)
 
         self.scroll = 0
         self.window.bind("<Down>", self.scrolldown)
         self.window.bind("<Up>", self.scrollup)
         self.window.bind("<MouseWheel>", self.on_mousewheel)
+        self.window.bind("<Configure>", self.on_resize)
+
+        self.width = WIDTH
+        self.height = HEIGHT
+        self.text = ""
 
     def load(self, url):
         body = url.request()
-        text = lex(body)
-        self.display_list = layout(text)
+        self.text = lex(body)
+        self.display_list = layout(self.text, self.width)
         self.draw()
 
     def draw(self):
         self.canvas.delete("all")
         for x, y, c in self.display_list:
-            if y > self.scroll + HEIGHT: continue
+            if y > self.scroll + self.height: continue
             if y + VSTEP < self.scroll: continue
             self.canvas.create_text(x, y - self.scroll, text=c)
 
-    def scrolldown(self, e):
+    def scrolldown(self, e=None):
         self.scroll += SCROLL_STEP
         self.draw()
 
-    def scrollup(self, e):
+    def scrollup(self, e=None):
         self.scroll -= SCROLL_STEP
         if self.scroll < 0:
             self.scroll = 0
@@ -88,6 +93,12 @@ class Browser:
             self.scrollup()
         else:
             self.scrolldown()
+
+    def on_resize(self, event):
+        self.width = event.width
+        self.height = event.height
+        self.display_list = layout(self.text, self.width)
+        self.draw()
 
 if __name__ == "__main__":
     
