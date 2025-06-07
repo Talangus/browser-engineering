@@ -56,6 +56,7 @@ class Browser:
         self.canvas.pack(fill=tkinter.BOTH, expand=True)
 
         self.scroll = 0
+        self.max_scroll = 0
         self.window.bind("<Down>", self.scrolldown)
         self.window.bind("<Up>", self.scrollup)
         self.window.bind("<MouseWheel>", self.on_mousewheel)
@@ -65,11 +66,41 @@ class Browser:
         self.height = HEIGHT
         self.text = ""
 
+    def update_display_list(self):
+        self.display_list = layout(self.text, self.width)
+        if self.display_list:
+            max_y = max(y for _, y, _ in self.display_list)
+            self.max_scroll = max(0, max_y - self.height + VSTEP)
+        else:
+            self.max_scroll = 0
+
     def load(self, url):
         body = url.request()
         self.text = lex(body)
-        self.display_list = layout(self.text, self.width)
+        self.update_display_list()
         self.draw()
+
+    def needs_scrollbar(self):
+        return self.max_scroll > 0
+
+    def draw_scrollbar(self):
+        if not self.needs_scrollbar():
+            return
+        bar_width = 10
+        bar_x0 = self.width - bar_width
+        bar_x1 = self.width
+
+        visible_ratio = self.height / (self.max_scroll + self.height)
+        bar_height = max(30, self.height * visible_ratio)
+
+        max_bar_y = self.height - bar_height
+        bar_y0 = (self.scroll / self.max_scroll) * max_bar_y if self.max_scroll else 0
+        bar_y1 = bar_y0 + bar_height
+
+        self.canvas.create_rectangle(
+            bar_x0, bar_y0, bar_x1, bar_y1,
+            fill="blue", outline="blue"
+        )
 
     def draw(self):
         self.canvas.delete("all")
@@ -77,9 +108,12 @@ class Browser:
             if y > self.scroll + self.height: continue
             if y + VSTEP < self.scroll: continue
             self.canvas.create_text(x, y - self.scroll, text=c)
+        self.draw_scrollbar()
 
     def scrolldown(self, e=None):
         self.scroll += SCROLL_STEP
+        if self.scroll > self.max_scroll:
+            self.scroll = self.max_scroll
         self.draw()
 
     def scrollup(self, e=None):
@@ -97,7 +131,9 @@ class Browser:
     def on_resize(self, event):
         self.width = event.width
         self.height = event.height
-        self.display_list = layout(self.text, self.width)
+        self.update_display_list()
+        if self.scroll > self.max_scroll:
+            self.scroll = self.max_scroll
         self.draw()
 
 if __name__ == "__main__":
