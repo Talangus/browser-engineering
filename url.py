@@ -5,6 +5,7 @@ import base64
 
 import utils
 from socket_manager import socket_manager
+from cache import cache
 class URL:
     DEFAULT_FILE_PATH="file:///Users/li016390/test.html"
     SUPPORTED_SCHEME_PORTS={
@@ -21,6 +22,8 @@ class URL:
         try:
             self.is_view_source = False
             self.redirect_count = 0
+            self.in_cache = False
+
             self.scheme, url = self.split_on_scheme(url)
             
             if self.scheme == 'data':
@@ -52,6 +55,8 @@ class URL:
 
     def request(self):
         if not self.need_socket():
+            if self.in_cache:
+                return cache.get(str(self))
             if self.scheme == "file":
                 content = utils.read_file(self.host + self.path)
                 return content
@@ -86,7 +91,10 @@ class URL:
 
         content_length = int(response_headers.get("content-length", 0))
         content = response.read(content_length).decode('utf-8')
-    
+        max_age =self.get_max_age(response_headers)
+        if max_age:
+            cache.set(str(self), content,  max_age)
+
         return content
 
     def get_req_headers_string(self):
@@ -104,6 +112,9 @@ class URL:
         }
     
     def need_socket(self):
+        if cache.in_cache(str(self)):
+            self.in_cache = True
+            return False
         return self.scheme in ["http", "https"]
     
     def split_on_scheme(self, url_str):
@@ -165,6 +176,32 @@ class URL:
     @staticmethod
     def is_relative_location(location):
         return location.startswith('/')
+    
+    @staticmethod
+    def get_max_age(response_headers):
+        cache_control = response_headers.get("cache-control", "")
+        if not cache_control:
+            return 0
+        
+        directives = cache_control.split(",")
+        max_age = None
+        valid_directives = {"max-age", "no-store"}
+
+        for directive in directives:
+            directive = directive.strip()
+            if directive.startswith("max-age="):
+                try:
+                    max_age = int(directive.split("=", 1)[1])
+                except ValueError:
+                    return 0  
+            elif directive == "no-store":
+                return 0  
+            elif directive.split("=")[0].strip() not in valid_directives:
+                return 0  
+
+        return max_age if max_age is not None else 0
+        
+
 
     def __repr__(self):
         return "URL(scheme={}, host={}, port={}, path={!r})".format(
