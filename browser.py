@@ -1,4 +1,5 @@
 import sys
+import os
 import tkinter
 
 from url import URL
@@ -8,13 +9,14 @@ WIDTH, HEIGHT = 800, 600
 HSTEP, VSTEP = 13, 18
 
 SCROLL_STEP = 100
+EMOJI_PATH = "openmoji"  # Folder with emoji PNGs
 
 def get_url_arg():
     if len(sys.argv) > 1:
         return sys.argv[1]
     else:
         # return URL.DEFAULT_FILE_PATH
-        return 'https://browser.engineering/examples/xiyouji.html'
+        return 'https://browser.engineering/graphics.html'
         # return 'http://browser.engineering/redirect3'
 
 def lex(body):
@@ -65,6 +67,21 @@ class Browser:
         self.width = WIDTH
         self.height = HEIGHT
         self.text = ""
+        self.emoji_cache = {}
+
+    def get_emoji_image(self, char):
+        codepoint = f"{ord(char):X}".upper()
+        filename = os.path.join(EMOJI_PATH, f"{codepoint}.png")
+        if not os.path.exists(filename):
+            return None
+        if filename not in self.emoji_cache:
+            img = tkinter.PhotoImage(file=filename)
+            if img.width() != 16 or img.height() != 16:
+                x_factor = max(1, img.width() // 16)
+                y_factor = max(1, img.height() // 16)
+                img = img.subsample(x_factor, y_factor)
+            self.emoji_cache[filename] = img
+        return self.emoji_cache[filename]
 
     def update_display_list(self):
         self.display_list = layout(self.text, self.width)
@@ -107,7 +124,11 @@ class Browser:
         for x, y, c in self.display_list:
             if y > self.scroll + self.height: continue
             if y + VSTEP < self.scroll: continue
-            self.canvas.create_text(x, y - self.scroll, text=c)
+            emoji_img = self.get_emoji_image(c)
+            if emoji_img:
+                self.canvas.create_image(x, y - self.scroll - 0.5*VSTEP, anchor="nw", image=emoji_img)
+            else:
+                self.canvas.create_text(x, y - self.scroll, text=c)
         self.draw_scrollbar()
 
     def scrolldown(self, e=None):
