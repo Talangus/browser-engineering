@@ -16,7 +16,7 @@ def get_url_arg():
         return sys.argv[1]
     else:
         # return URL.DEFAULT_FILE_PATH
-        return 'https://browser.engineering/graphics.html'
+        return 'about:blank'
         # return 'http://browser.engineering/redirect3'
 
 def lex(body):
