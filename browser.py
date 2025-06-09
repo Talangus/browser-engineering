@@ -2,49 +2,42 @@ import sys
 import os
 import tkinter
 
+import utils
 from url import URL
 from socket_manager import socket_manager
-
-WIDTH, HEIGHT = 800, 600
-HSTEP, VSTEP = 13, 18
-
-SCROLL_STEP = 100
-EMOJI_PATH = "openmoji"  # Folder with emoji PNGs
-
-def get_url_arg():
-    if len(sys.argv) > 1:
-        return sys.argv[1]
-    else:
-        # return URL.DEFAULT_FILE_PATH
-        return 'about:blank'
-        # return 'http://browser.engineering/redirect3'
+from layout import Layout, Text, Tag
+from config import WIDTH, HEIGHT, HSTEP, VSTEP, SCROLL_STEP
 
 def lex(body):
-    text = ""
+    out = []
+    buffer = ""
     in_tag = False
+    entity_buffer = ""
     for c in body:
         if c == "<":
             in_tag = True
+            if buffer:
+                out.append(Text(buffer))
+                buffer = ""
         elif c == ">":
             in_tag = False
+            out.append(Tag(buffer))
+            buffer = ""
         elif not in_tag:
-            text += c
-    return text
-
-def layout(text, width=WIDTH):
-    display_list = []
-    cursor_x, cursor_y = HSTEP, VSTEP
-    for c in text:
-        if c == "\n":
-            cursor_x = HSTEP
-            cursor_y += VSTEP * 2 
+            if c == "&":
+                entity_buffer = "&"
+            elif entity_buffer:
+                entity_buffer += c
+                if c == ";":
+                    buffer += utils.html_unescape(entity_buffer)
+                    entity_buffer = ""
+            else:
+                buffer += c
         else:
-            display_list.append((cursor_x, cursor_y, c))
-            cursor_x += HSTEP
-            if cursor_x >= width - HSTEP:
-                cursor_y += VSTEP
-                cursor_x = HSTEP
-    return display_list
+            buffer += c
+    if not in_tag and buffer:
+        out.append(Text(buffer))
+    return out
 
 class Browser:
     def __init__(self):
@@ -54,7 +47,6 @@ class Browser:
             width=WIDTH,
             height=HEIGHT
         )
-
         self.canvas.pack(fill=tkinter.BOTH, expand=True)
 
         self.scroll = 0
@@ -66,34 +58,20 @@ class Browser:
 
         self.width = WIDTH
         self.height = HEIGHT
-        self.text = ""
-        self.emoji_cache = {}
-
-    def get_emoji_image(self, char):
-        codepoint = f"{ord(char):X}".upper()
-        filename = os.path.join(EMOJI_PATH, f"{codepoint}.png")
-        if not os.path.exists(filename):
-            return None
-        if filename not in self.emoji_cache:
-            img = tkinter.PhotoImage(file=filename)
-            if img.width() != 16 or img.height() != 16:
-                x_factor = max(1, img.width() // 16)
-                y_factor = max(1, img.height() // 16)
-                img = img.subsample(x_factor, y_factor)
-            self.emoji_cache[filename] = img
-        return self.emoji_cache[filename]
+        self.display_list = []
 
     def update_display_list(self):
-        self.display_list = layout(self.text, self.width)
+        tokens = lex(self.text)
+        layout = Layout(tokens, width=self.width, hstep=HSTEP, vstep=VSTEP)
+        self.display_list = layout.display_list
         if self.display_list:
-            max_y = max(y for _, y, _ in self.display_list)
+            max_y = max(y for _, y, _, _ in self.display_list)
             self.max_scroll = max(0, max_y - self.height + VSTEP)
         else:
             self.max_scroll = 0
 
     def load(self, url):
-        body = url.request()
-        self.text = lex(body)
+        self.text = url.request()
         self.update_display_list()
         self.draw()
 
@@ -121,14 +99,10 @@ class Browser:
 
     def draw(self):
         self.canvas.delete("all")
-        for x, y, c in self.display_list:
+        for x, y, word, font in self.display_list:
             if y > self.scroll + self.height: continue
-            if y + VSTEP < self.scroll: continue
-            emoji_img = self.get_emoji_image(c)
-            if emoji_img:
-                self.canvas.create_image(x, y - self.scroll - 0.5*VSTEP, anchor="nw", image=emoji_img)
-            else:
-                self.canvas.create_text(x, y - self.scroll, text=c)
+            if y + font.metrics("linespace") < self.scroll: continue
+            self.canvas.create_text(x, y - self.scroll, text=word, font=font, anchor="nw")
         self.draw_scrollbar()
 
     def scrolldown(self, e=None):
@@ -157,8 +131,13 @@ class Browser:
             self.scroll = self.max_scroll
         self.draw()
 
+def get_url_arg():
+    if len(sys.argv) > 1:
+        return sys.argv[1]
+    else:
+        return 'https://browser.engineering/text.html'
+
 if __name__ == "__main__":
-    
     url_arg = get_url_arg()
     url = URL(url_arg)
     Browser().load(url)
