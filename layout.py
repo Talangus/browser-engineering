@@ -2,7 +2,6 @@ import tkinter.font
 import utils
 from config import WIDTH, HEIGHT, HSTEP, VSTEP
 
-# --- Token classes ---
 class Text:
     def __init__(self, text):
         self.text = text
@@ -17,7 +16,6 @@ class Tag:
     def __repr__(self):
         return f"Tag({self.tag!r})"
 
-# --- Font cache ---
 FONTS = {}
 def get_font(size, weight, style):
     key = (size, weight, style)
@@ -26,7 +24,6 @@ def get_font(size, weight, style):
         FONTS[key] = font
     return FONTS[key]
 
-# --- Layout ---
 class Layout:
     def __init__(self, tokens, width=WIDTH, hstep=HSTEP, vstep=VSTEP):
         self.tokens = tokens
@@ -37,6 +34,7 @@ class Layout:
         self.weight = "normal"
         self.style = "roman"
         self.size = 12
+        self.in_title = False
 
         self.line = []
         self.width = width
@@ -51,6 +49,12 @@ class Layout:
         if isinstance(tok, Text):
             for word in tok.text.split():
                 self.word(word)
+        elif tok.tag == 'h1 class="title"':
+            self.in_title = True
+        elif tok.tag == "/h1":
+            self.flush()
+            self.in_title = False
+            self.cursor_y += self.vstep
         elif tok.tag == "i":
             self.style = "italic"
         elif tok.tag == "/i":
@@ -86,9 +90,19 @@ class Layout:
         metrics = [font.metrics() for x, word, font in self.line]
         max_ascent = max([metric["ascent"] for metric in metrics])
         baseline = self.cursor_y + 1.25 * max_ascent
+
+        if self.in_title:
+            line_width = 0
+            if self.line:
+                last_x, last_word, last_font = self.line[-1]
+                line_width = last_x + last_font.measure(last_word) - self.hstep
+            offset = (self.width - line_width) // 2 if line_width < self.width else 0
+        else:
+            offset = 0
+
         for x, word, font in self.line:
             y = baseline - font.metrics("ascent")
-            self.display_list.append((x, y, word, font))
+            self.display_list.append((x + offset, y, word, font))
         max_descent = max([metric["descent"] for metric in metrics])
         self.cursor_y = baseline + 1.25 * max_descent
         self.cursor_x = self.hstep
