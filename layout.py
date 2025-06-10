@@ -1,6 +1,6 @@
 import tkinter.font
 import utils
-from config import WIDTH, HEIGHT, HSTEP, VSTEP
+from config import WIDTH, HEIGHT, HSTEP, VSTEP, FONT_SIZE
 
 class Text:
     def __init__(self, text):
@@ -33,8 +33,10 @@ class Layout:
         self.cursor_y = vstep
         self.weight = "normal"
         self.style = "roman"
-        self.size = 12
+        self.size = FONT_SIZE
         self.in_title = False
+        self.in_sup_tag = False
+        self.prev_size = None
 
         self.line = []
         self.width = width
@@ -71,6 +73,14 @@ class Layout:
             self.size += 4
         elif tok.tag == "/big":
             self.size -= 4
+        elif tok.tag == "sup":
+            self.in_sup_tag = True
+            self.prev_size = self.size
+            self.size = max(1, FONT_SIZE // 2)
+        elif tok.tag == "/sup":
+            self.in_sup_tag = False
+            self.size = self.prev_size
+            self.prev_size = None
         elif tok.tag == "br":
             self.flush()
         elif tok.tag == "/p":
@@ -82,26 +92,28 @@ class Layout:
         w = font.measure(word)
         if self.cursor_x + w > self.width - self.hstep:
             self.flush()
-        self.line.append((self.cursor_x, word, font))
+        self.line.append((self.cursor_x, word, font, self.in_sup_tag))
         self.cursor_x += w + font.measure(" ")
 
     def flush(self):
         if not self.line: return
-        metrics = [font.metrics() for x, word, font in self.line]
+        metrics = [font.metrics() for x, word, font, sup in self.line]
         max_ascent = max([metric["ascent"] for metric in metrics])
         baseline = self.cursor_y + 1.25 * max_ascent
 
         if self.in_title:
             line_width = 0
             if self.line:
-                last_x, last_word, last_font = self.line[-1]
+                last_x, last_word, last_font, *_ = self.line[-1]
                 line_width = last_x + last_font.measure(last_word) - self.hstep
             offset = (self.width - line_width) // 2 if line_width < self.width else 0
         else:
             offset = 0
 
-        for x, word, font in self.line:
+        for x, word, font, in_sup_tag in self.line:
             y = baseline - font.metrics("ascent")
+            if in_sup_tag:
+                y = baseline - max_ascent
             self.display_list.append((x + offset, y, word, font))
         max_descent = max([metric["descent"] for metric in metrics])
         self.cursor_y = baseline + 1.25 * max_descent
