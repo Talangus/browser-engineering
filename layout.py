@@ -17,10 +17,13 @@ class Tag:
         return f"Tag({self.tag!r})"
 
 FONTS = {}
-def get_font(size, weight, style):
-    key = (size, weight, style)
+def get_font(size, weight, style, family=None):
+    key = (size, weight, style, family)
     if key not in FONTS:
-        font = tkinter.font.Font(size=size, weight=weight, slant=style)
+        if family:
+            font = tkinter.font.Font(size=size, weight=weight, slant=style, family=family)
+        else:
+            font = tkinter.font.Font(size=size, weight=weight, slant=style)
         FONTS[key] = font
     return FONTS[key]
 
@@ -66,6 +69,7 @@ class Layout:
         self.in_title = False
         self.in_sup_tag = False
         self.in_abbr = False
+        self.in_pre = False
         self.prev_size = None
         self.prev_weight = None
 
@@ -80,8 +84,11 @@ class Layout:
 
     def token(self, tok):
         if isinstance(tok, Text):
-            for word in tok.text.split():
-                self.word(word)
+            if self.in_pre:
+                self.pre_text(tok.text)
+            else:
+                for word in tok.text.split():
+                    self.word(word)
         elif tok.tag == 'h1 class="title"':
             self.in_title = True
         elif tok.tag == "/h1":
@@ -112,6 +119,13 @@ class Layout:
             self.in_sup_tag = False
             self.size = self.prev_size
             self.prev_size = None
+        elif tok.tag == "pre":
+            self.in_pre = True
+            self.flush()
+        elif tok.tag == "/pre":
+            self.in_pre = False
+            self.flush()
+            self.cursor_y += self.vstep
         elif tok.tag == "abbr":
             self.in_abbr = True
             self.prev_size = self.size
@@ -148,6 +162,18 @@ class Layout:
         display_word = word.replace(SOFT_HYPHEN, "")
         self.line.append((self.cursor_x, display_word, font, self.in_sup_tag))
         self.cursor_x += font.measure(display_word) + font.measure(" ")
+
+    def pre_text(self, text):
+        font = get_font(self.size, self.weight, self.style, family="Courier New")
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            x = self.cursor_x
+            for c in line:
+                self.line.append((x, c, font, self.in_sup_tag))
+                x += font.measure(c)
+            if i < len(lines) - 1:
+                self.flush()
+        self.cursor_x = x
 
     def flush(self):
         if not self.line: return
