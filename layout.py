@@ -65,7 +65,9 @@ class Layout:
         self.size = FONT_SIZE
         self.in_title = False
         self.in_sup_tag = False
+        self.in_abbr = False
         self.prev_size = None
+        self.prev_weight = None
 
         self.line = []
         self.width = width
@@ -110,6 +112,18 @@ class Layout:
             self.in_sup_tag = False
             self.size = self.prev_size
             self.prev_size = None
+        elif tok.tag == "abbr":
+            self.in_abbr = True
+            self.prev_size = self.size
+            self.prev_weight = self.weight
+            self.size = int(self.size * 0.7)
+            self.weight = "bold"
+        elif tok.tag == "/abbr":
+            self.in_abbr = False
+            self.size = self.prev_size
+            self.weight = self.prev_weight
+            self.prev_size = None
+            self.prev_weight = None
         elif tok.tag == "br":
             self.flush()
         elif tok.tag == "/p":
@@ -118,6 +132,7 @@ class Layout:
 
     def word(self, word):
         SOFT_HYPHEN = "\u00AD"
+        word = word.upper() if self.in_abbr else word
         font = get_font(self.size, self.weight, self.style)
         w = font.measure(word)
         if self.cursor_x + w > self.width - self.hstep and SOFT_HYPHEN in word:
