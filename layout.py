@@ -24,6 +24,35 @@ def get_font(size, weight, style):
         FONTS[key] = font
     return FONTS[key]
 
+def find_soft_hyphen_break(word, font, start_x, max_width):
+    SOFT_HYPHEN = "\u00AD"
+    parts = []
+    last = 0
+    for i, c in enumerate(word):
+        if c == SOFT_HYPHEN:
+            parts.append(word[last:i])
+            last = i + 1
+    parts.append(word[last:])
+
+    prefix = ""
+    current_x = start_x
+    for i, part in enumerate(parts[:-1]):
+        test = prefix + part + "-"
+        test_w = font.measure(test)
+        if current_x + test_w > max_width:
+            break
+        prefix += part
+        prefix += SOFT_HYPHEN
+
+    clean_prefix = prefix.rstrip(SOFT_HYPHEN)
+    if clean_prefix:
+        suffix = word[len(prefix):]
+        if suffix.startswith(SOFT_HYPHEN):
+            suffix = suffix[1:]
+        return clean_prefix, suffix
+    else:
+        return "", ""
+
 class Layout:
     def __init__(self, tokens, width=WIDTH, hstep=HSTEP, vstep=VSTEP):
         self.tokens = tokens
@@ -88,12 +117,22 @@ class Layout:
             self.cursor_y += self.vstep
 
     def word(self, word):
+        SOFT_HYPHEN = "\u00AD"
         font = get_font(self.size, self.weight, self.style)
         w = font.measure(word)
+        if self.cursor_x + w > self.width - self.hstep and SOFT_HYPHEN in word:
+            prefix, suffix = find_soft_hyphen_break(word, font, self.cursor_x, self.width - self.hstep)
+            if prefix:
+                self.line.append((self.cursor_x, prefix + "-", font, self.in_sup_tag))
+                self.flush()
+                if suffix:
+                    self.word(suffix)
+                return
         if self.cursor_x + w > self.width - self.hstep:
             self.flush()
-        self.line.append((self.cursor_x, word, font, self.in_sup_tag))
-        self.cursor_x += w + font.measure(" ")
+        display_word = word.replace(SOFT_HYPHEN, "")
+        self.line.append((self.cursor_x, display_word, font, self.in_sup_tag))
+        self.cursor_x += font.measure(display_word) + font.measure(" ")
 
     def flush(self):
         if not self.line: return

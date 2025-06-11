@@ -136,7 +136,7 @@ def get_url_arg():
         return sys.argv[1]
     else:
         # return 'https://browser.engineering/text.html'
-        return 'file:///Users/li016390/Desktop/challenges/browser-engineering/test/test_centered_title.html'
+        return 'file:///Users/li016390/Desktop/challenges/browser-engineering/test/test_chapter_3.html'
 
 if __name__ == "__main__":
     url_arg = get_url_arg()
