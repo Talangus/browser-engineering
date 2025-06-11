@@ -1,8 +1,7 @@
 import tkinter.font
 import utils
-from config import WIDTH, HEIGHT, HSTEP, VSTEP
+from config import WIDTH, HEIGHT, HSTEP, VSTEP, FONT_SIZE
 
-# --- Token classes ---
 class Text:
     def __init__(self, text):
         self.text = text
@@ -17,16 +16,46 @@ class Tag:
     def __repr__(self):
         return f"Tag({self.tag!r})"
 
-# --- Font cache ---
 FONTS = {}
-def get_font(size, weight, style):
-    key = (size, weight, style)
+def get_font(size, weight, style, family=None):
+    key = (size, weight, style, family)
     if key not in FONTS:
-        font = tkinter.font.Font(size=size, weight=weight, slant=style)
+        if family:
+            font = tkinter.font.Font(size=size, weight=weight, slant=style, family=family)
+        else:
+            font = tkinter.font.Font(size=size, weight=weight, slant=style)
         FONTS[key] = font
     return FONTS[key]
 
-# --- Layout ---
+def find_soft_hyphen_break(word, font, start_x, max_width):
+    SOFT_HYPHEN = "\u00AD"
+    parts = []
+    last = 0
+    for i, c in enumerate(word):
+        if c == SOFT_HYPHEN:
+            parts.append(word[last:i])
+            last = i + 1
+    parts.append(word[last:])
+
+    prefix = ""
+    current_x = start_x
+    for i, part in enumerate(parts[:-1]):
+        test = prefix + part + "-"
+        test_w = font.measure(test)
+        if current_x + test_w > max_width:
+            break
+        prefix += part
+        prefix += SOFT_HYPHEN
+
+    clean_prefix = prefix.rstrip(SOFT_HYPHEN)
+    if clean_prefix:
+        suffix = word[len(prefix):]
+        if suffix.startswith(SOFT_HYPHEN):
+            suffix = suffix[1:]
+        return clean_prefix, suffix
+    else:
+        return "", ""
+
 class Layout:
     def __init__(self, tokens, width=WIDTH, hstep=HSTEP, vstep=VSTEP):
         self.tokens = tokens
@@ -36,7 +65,13 @@ class Layout:
         self.cursor_y = vstep
         self.weight = "normal"
         self.style = "roman"
-        self.size = 12
+        self.size = FONT_SIZE
+        self.in_title = False
+        self.in_sup_tag = False
+        self.in_abbr = False
+        self.in_pre = False
+        self.prev_size = None
+        self.prev_weight = None
 
         self.line = []
         self.width = width
@@ -49,8 +84,17 @@ class Layout:
 
     def token(self, tok):
         if isinstance(tok, Text):
-            for word in tok.text.split():
-                self.word(word)
+            if self.in_pre:
+                self.pre_text(tok.text)
+            else:
+                for word in tok.text.split():
+                    self.word(word)
+        elif tok.tag == 'h1 class="title"':
+            self.in_title = True
+        elif tok.tag == "/h1":
+            self.flush()
+            self.in_title = False
+            self.cursor_y += self.vstep
         elif tok.tag == "i":
             self.style = "italic"
         elif tok.tag == "/i":
@@ -67,6 +111,33 @@ class Layout:
             self.size += 4
         elif tok.tag == "/big":
             self.size -= 4
+        elif tok.tag == "sup":
+            self.in_sup_tag = True
+            self.prev_size = self.size
+            self.size = max(1, FONT_SIZE // 2)
+        elif tok.tag == "/sup":
+            self.in_sup_tag = False
+            self.size = self.prev_size
+            self.prev_size = None
+        elif tok.tag == "pre":
+            self.in_pre = True
+            self.flush()
+        elif tok.tag == "/pre":
+            self.in_pre = False
+            self.flush()
+            self.cursor_y += self.vstep
+        elif tok.tag == "abbr":
+            self.in_abbr = True
+            self.prev_size = self.size
+            self.prev_weight = self.weight
+            self.size = int(self.size * 0.7)
+            self.weight = "bold"
+        elif tok.tag == "/abbr":
+            self.in_abbr = False
+            self.size = self.prev_size
+            self.weight = self.prev_weight
+            self.prev_size = None
+            self.prev_weight = None
         elif tok.tag == "br":
             self.flush()
         elif tok.tag == "/p":
@@ -74,21 +145,56 @@ class Layout:
             self.cursor_y += self.vstep
 
     def word(self, word):
+        SOFT_HYPHEN = "\u00AD"
+        word = word.upper() if self.in_abbr else word
         font = get_font(self.size, self.weight, self.style)
         w = font.measure(word)
+        if self.cursor_x + w > self.width - self.hstep and SOFT_HYPHEN in word:
+            prefix, suffix = find_soft_hyphen_break(word, font, self.cursor_x, self.width - self.hstep)
+            if prefix:
+                self.line.append((self.cursor_x, prefix + "-", font, self.in_sup_tag))
+                self.flush()
+                if suffix:
+                    self.word(suffix)
+                return
         if self.cursor_x + w > self.width - self.hstep:
             self.flush()
-        self.line.append((self.cursor_x, word, font))
-        self.cursor_x += w + font.measure(" ")
+        display_word = word.replace(SOFT_HYPHEN, "")
+        self.line.append((self.cursor_x, display_word, font, self.in_sup_tag))
+        self.cursor_x += font.measure(display_word) + font.measure(" ")
+
+    def pre_text(self, text):
+        font = get_font(self.size, self.weight, self.style, family="Courier New")
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            x = self.cursor_x
+            for c in line:
+                self.line.append((x, c, font, self.in_sup_tag))
+                x += font.measure(c)
+            if i < len(lines) - 1:
+                self.flush()
+        self.cursor_x = x
 
     def flush(self):
         if not self.line: return
-        metrics = [font.metrics() for x, word, font in self.line]
+        metrics = [font.metrics() for x, word, font, sup in self.line]
         max_ascent = max([metric["ascent"] for metric in metrics])
         baseline = self.cursor_y + 1.25 * max_ascent
-        for x, word, font in self.line:
+
+        if self.in_title:
+            line_width = 0
+            if self.line:
+                last_x, last_word, last_font, *_ = self.line[-1]
+                line_width = last_x + last_font.measure(last_word) - self.hstep
+            offset = (self.width - line_width) // 2 if line_width < self.width else 0
+        else:
+            offset = 0
+
+        for x, word, font, in_sup_tag in self.line:
             y = baseline - font.metrics("ascent")
-            self.display_list.append((x, y, word, font))
+            if in_sup_tag:
+                y = baseline - max_ascent
+            self.display_list.append((x + offset, y, word, font))
         max_descent = max([metric["descent"] for metric in metrics])
         self.cursor_y = baseline + 1.25 * max_descent
         self.cursor_x = self.hstep

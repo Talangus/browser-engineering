@@ -15,6 +15,7 @@ def html_unescape(entity):
         "&reg;": "®",
         "&trade;": "™",
         "&euro;": "€",
-        "&ndash;": "–"
+        "&ndash;": "–",
+        "&shy;": "\u00AD"
     }
     return entity_map.get(entity, entity)
