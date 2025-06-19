@@ -149,7 +149,8 @@ class URL:
         "https": 443, 
         "file": None, 
         "data":None,
-        "view-source": None
+        "view-source": None,
+        "about": None
     }
     DATA_URL_TYPES=["text"]
     MAX_REDIR_COUNT=5
@@ -159,6 +160,7 @@ class URL:
             self.is_view_source = False
             self.redirect_count = 0
             self.in_cache = False
+            self.is_blank = False
 
             self.scheme, url = self.split_on_scheme(url)
 
@@ -168,6 +170,12 @@ class URL:
             elif self.scheme == "view-source":
                 self.is_view_source = True
                 self.scheme, url = self.split_on_scheme(url)
+            elif self.scheme == "about":
+                if url == "blank":
+                    self.is_blank = True
+                    return
+                else:
+                    raise ValueError("Invalid about URL: {}".format(url))
 
             if "/" not in url:
                 url = url + "/"
@@ -183,9 +191,9 @@ class URL:
                 self.host, port = self.host.split(":", 1)
                 self.port = int(port)
         except:
-            print("Malformed URL found, falling back to the WBE home page.")
+            print("Malformed URL found")
             print("  URL was: " + url)
-            self.__init__("https://browser.engineering")
+            self.__init__("about:blank")
 
     def request(self):
         if not self.need_socket():
@@ -197,6 +205,8 @@ class URL:
             elif self.scheme =="data":
                 content = self.process_data_scheme(self.data)
                 return content
+            elif self.is_blank:
+                return ""
 
         s = socket_manager.get_socket(self.host, self.port, self.scheme)
 
@@ -268,7 +278,7 @@ class URL:
         scheme, rest = url_str.split(":", 1)
         assert scheme in self.SUPPORTED_SCHEME_PORTS
 
-        if not scheme in ['data', 'view-source']:
+        if not scheme in ['data', 'view-source', 'about']:
             rest = rest[2:]
 
         return scheme, rest
