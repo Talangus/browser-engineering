@@ -50,7 +50,17 @@ class HTMLParser:
     def parse(self):
         text = ""
         in_tag = False
-        for c in self.body:
+        i = 0
+        while i < len(self.body):
+            if self.body.startswith("<!--", i):
+                end_comment = self.body.find("-->", i)
+                if end_comment == -1:
+                    break
+                i = end_comment + 3
+                in_tag = False
+                text = ""
+                continue
+            c = self.body[i]
             if c == "<":
                 in_tag = True
                 if text: self.add_text(text)
@@ -61,6 +71,7 @@ class HTMLParser:
                 text = ""
             else:
                 text += c
+            i += 1
         if not in_tag and text:
             self.add_text(text)
         return self.finish()
@@ -158,6 +169,35 @@ class Layout:
 
     @wbetools.delete
     def token(self, tok): pass
+
+    @wbetools.delete
+    def word(self, word):
+        font = get_font(self.size, self.weight, self.style)
+        w = font.measure(word)
+        if self.cursor_x + w > WIDTH - HSTEP:
+            self.flush()
+        self.line.append((self.cursor_x, word, font))
+        self.cursor_x += w + font.measure(" ")
+
+    @wbetools.delete
+    def flush(self):
+        if not self.line: return
+        wbetools.record("initial_y", self.cursor_y, self.line);
+        metrics = [font.metrics() for x, word, font in self.line]
+        wbetools.record("metrics", metrics)
+        max_ascent = max([metric["ascent"] for metric in metrics])
+        baseline = self.cursor_y + 1.25 * max_ascent
+        wbetools.record("max_ascent", max_ascent);
+        for x, word, font in self.line:
+            y = baseline - font.metrics("ascent")
+            self.display_list.append((x, y, word, font))
+            wbetools.record("aligned", self.display_list);
+        max_descent = max([metric["descent"] for metric in metrics])
+        wbetools.record("max_descent", max_descent);
+        self.cursor_y = baseline + 1.25 * max_descent
+        self.cursor_x = HSTEP
+        self.line = []
+        wbetools.record("final_y", self.cursor_y);
 
     def recurse(self, tree):
         if isinstance(tree, Text):
