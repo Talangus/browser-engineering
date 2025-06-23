@@ -207,9 +207,12 @@ class Layout:
 
     def flush(self):
         if not self.line: return
+        wbetools.record("initial_y", self.cursor_y, self.line);
         metrics = [font.metrics() for x, word, font, sup in self.line]
+        wbetools.record("metrics", metrics);
         max_ascent = max([metric["ascent"] for metric in metrics])
         baseline = self.cursor_y + 1.25 * max_ascent
+        wbetools.record("max_ascent", max_ascent);
 
         if self.in_title:
             line_width = 0
@@ -225,10 +228,13 @@ class Layout:
             if in_sup_tag:
                 y = baseline - max_ascent
             self.display_list.append((x + offset, y, word, font))
+            wbetools.record("aligned", self.display_list);
         max_descent = max([metric["descent"] for metric in metrics])
+        wbetools.record("max_descent", max_descent);
         self.cursor_y = baseline + 1.25 * max_descent
         self.cursor_x = HSTEP
         self.line = []
+        wbetools.record("final_y", self.cursor_y);
 
 @wbetools.patch(Browser)
 class Browser:
