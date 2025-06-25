@@ -160,6 +160,5 @@ class Browser:
 
 if __name__ == "__main__":
     import sys
-    Browser().load(URL("https://google.com"))
-    # Browser().load(URL(sys.argv[1]))
+    Browser().load(URL(sys.argv[1]))
     tkinter.mainloop()
