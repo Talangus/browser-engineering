@@ -249,6 +249,8 @@ class Browser:
 
         self.scroll = 0
         self.window.bind("<Down>", self.scrolldown)
+        self.window.bind("<Up>", self.scrollup)
+        self.window.bind("<MouseWheel>", self.on_mousewheel)
         self.display_list = []
 
     def load(self, url):
@@ -263,8 +265,13 @@ class Browser:
             if y > self.scroll + HEIGHT: continue
             if y + font.metrics("linespace") < self.scroll: continue
             self.canvas.create_text(x, y - self.scroll, text=word, font=font, anchor="nw")
+    
+    @wbetools.delete
+    def scrolldown(self, e):
+        self.scroll += SCROLL_STEP
+        self.draw()
 
 if __name__ == "__main__":
     import sys
-    Browser().load(URL(sys.argv[1]))
+    Browser().load(URL("https://google.com"))
     tkinter.mainloop()

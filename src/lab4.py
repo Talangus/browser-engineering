@@ -9,7 +9,8 @@ import socket
 import ssl
 import tkinter
 import tkinter.font
-from lab1 import URL
+import re
+from lab1 import URL, html_unescape
 from lab2 import WIDTH, HEIGHT, HSTEP, VSTEP, SCROLL_STEP
 from lab3 import FONTS, get_font, Layout, Browser
 
@@ -221,7 +222,17 @@ class HTMLParser:
             node = self.unfinished.pop()
             parent = self.unfinished[-1]
             parent.children.append(node)
-        return self.unfinished.pop()
+        root = self.unfinished.pop()
+        self.unescape_tree(root)
+        return root
+    
+    def unescape_tree(self, node):
+        if isinstance(node, Text):
+            def replace_entity(match):
+                return html_unescape(match.group(0))
+            node.text = re.sub(r"&[a-zA-Z0-9#]+?;", replace_entity, node.text)
+        for child in getattr(node, "children", []):
+            self.unescape_tree(child)
 
 @wbetools.patch(Layout)
 class Layout:
@@ -233,6 +244,7 @@ class Layout:
         self.weight = "normal"
         self.style = "roman"
         self.size = 12
+        self.in_pre = False
 
         self.line = []
         self.recurse(tree)
@@ -243,6 +255,9 @@ class Layout:
 
     @wbetools.delete
     def word(self, word):
+        if word == '\n' and self.in_pre:
+            self.flush()
+            return
         font = get_font(self.size, self.weight, self.style)
         w = font.measure(word)
         if self.cursor_x + w > WIDTH - HSTEP:
@@ -272,13 +287,19 @@ class Layout:
 
     def recurse(self, tree):
         if isinstance(tree, Text):
-            for word in tree.text.split():
+            for word in self.split_text(tree.text):
                 self.word(word)
         else:
             self.open_tag(tree.tag)
             for child in tree.children:
                 self.recurse(child)
             self.close_tag(tree.tag)
+
+    def split_text(self, text):
+        if self.in_pre:
+            return re.split(r'(\s)', text)
+        
+        return text.split()
 
     def open_tag(self, tag):
         if tag == "i":
@@ -289,6 +310,8 @@ class Layout:
             self.size -= 2
         elif tag == "big":
             self.size += 4
+        elif tag == "pre":
+            self.in_pre = True
         elif tag == "br":
             self.flush()
 
@@ -301,6 +324,8 @@ class Layout:
             self.size += 2
         elif tag == "big":
             self.size -= 4
+        elif tag == "pre":
+            self.in_pre = False
         elif tag == "p":
             self.flush()
             self.cursor_y += VSTEP
@@ -309,6 +334,8 @@ class Layout:
 class Browser:
     def load(self, url):
         body = url.request()
+        if url.is_view_source:
+            body = "<pre>" + body.replace("<", "&lt;").replace(">", "&gt;") + "</pre>"
         self.nodes = HTMLParser(body).parse()
         print_tree(self.nodes)
         self.display_list = Layout(self.nodes).display_list
@@ -317,5 +344,5 @@ class Browser:
 if __name__ == "__main__":
     import sys
     # Browser().load(URL(sys.argv[1]))
-    Browser().load(URL('file:///Users/li016390/Desktop/challenges/test.html'))
+    Browser().load(URL('view-source:file:///Users/li016390/Desktop/challenges/test.html'))
     tkinter.mainloop()
