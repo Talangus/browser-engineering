@@ -140,6 +140,10 @@ class HTMLParser:
             elif open_tags == ["html", "head"] and \
                  tag not in ["/head"] + self.HEAD_TAGS:
                 self.add_tag("/head")
+            elif tag == 'p' and 'p' in open_tags:
+                self.add_tag('/p')
+            elif  tag == 'li' and 'li' in open_tags:
+                self.add_tag('/li')
             else:
                 break
 
@@ -239,10 +243,12 @@ class Browser:
     def load(self, url):
         body = url.request()
         self.nodes = HTMLParser(body).parse()
+        print_tree(self.nodes)
         self.display_list = Layout(self.nodes).display_list
         self.draw()
 
 if __name__ == "__main__":
     import sys
-    Browser().load(URL(sys.argv[1]))
+    # Browser().load(URL(sys.argv[1]))
+    Browser().load(URL('file:///Users/li016390/Desktop/challenges/test.html'))
     tkinter.mainloop()
