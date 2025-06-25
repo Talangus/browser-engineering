@@ -46,61 +46,102 @@ class HTMLParser:
     def __init__(self, body):
         self.body = body
         self.unfinished = []
+        self.body_index = 0  # New property to track position
 
     def parse(self):
         text = ""
         in_tag = False
-        i = 0
         in_script = False
-        while i < len(self.body):
-            if not in_script and self.body.startswith("<!--", i):
-                end_comment = self.body.find("-->", i)
-                if end_comment == -1:
-                    break
-                i = end_comment + 3
+        self.body_index = 0
+
+        while self.body_index < len(self.body):
+            if not in_script and self.body.startswith("<!--", self.body_index):
+                self.skip_comment()
                 in_tag = False
                 text = ""
                 continue
-            if not in_script and self.body.startswith("<script", i):
+            if not in_script and self.body.startswith("<script", self.body_index):
                 in_tag = True
                 if text: self.add_text(text)
                 text = ""
-                script_tag_end = self.body.find(">", i)
-                if script_tag_end == -1:
-                    break
-                self.add_tag(self.body[i+1:script_tag_end])
-                i = script_tag_end + 1
+                self.handle_script_tag()
                 in_script = True
                 continue
             if in_script:
-                script_end = self.body.find("</script>", i)
-                if script_end == -1:
-                    script_content = self.body[i:]
-                    i = len(self.body)
-                else:
-                    script_content = self.body[i:script_end]
-                    i = script_end + len("</script>")
-                if script_content:
-                    self.add_text(script_content)
-                self.add_tag("/script")
-                in_script = False
+                in_script = not self.handle_script_content()
                 text = ""
                 continue
-            c = self.body[i]
+            c = self.body[self.body_index]
             if c == "<":
                 in_tag = True
                 if text: self.add_text(text)
                 text = ""
-            elif c == ">":
+                tag_content = self.read_tag()
+                self.add_tag(tag_content)
                 in_tag = False
-                self.add_tag(text)
                 text = ""
+                continue
             else:
                 text += c
-            i += 1
+                self.body_index += 1
         if not in_tag and text:
             self.add_text(text)
         return self.finish()
+
+    def read_tag(self):
+        assert self.body[self.body_index] == "<"
+        self.body_index += 1
+        tag = ""
+        in_quote = False
+        quote_char = ""
+        while self.body_index < len(self.body):
+            c = self.body[self.body_index]
+            if in_quote:
+                tag += c
+                if c == quote_char:
+                    in_quote = False
+                self.body_index += 1
+            else:
+                if c in ['"', "'"]:
+                    in_quote = True
+                    quote_char = c
+                    tag += c
+                    self.body_index += 1
+                elif c == ">":
+                    self.body_index += 1
+                    break
+                else:
+                    tag += c
+                    self.body_index += 1
+        return tag.strip()
+
+    def skip_comment(self):
+        end_comment = self.body.find("-->", self.body_index)
+        if end_comment == -1:
+            self.body_index = len(self.body)
+        else:
+            self.body_index = end_comment + 3
+
+    def handle_script_tag(self):
+        script_tag_end = self.body.find(">", self.body_index)
+        if script_tag_end == -1:
+            self.body_index = len(self.body)
+            return
+        self.add_tag(self.body[self.body_index + 1:script_tag_end])
+        self.body_index = script_tag_end + 1
+
+    def handle_script_content(self):
+        script_end = self.body.find("</script>", self.body_index)
+        if script_end == -1:
+            script_content = self.body[self.body_index:]
+            self.body_index = len(self.body)
+        else:
+            script_content = self.body[self.body_index:script_end]
+            self.body_index = script_end + len("</script>")
+        if script_content:
+            self.add_text(script_content)
+        self.add_tag("/script")
+        return script_end != -1
 
     def get_attributes(self, text):
         parts = text.split()
