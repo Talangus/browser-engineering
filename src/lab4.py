@@ -1,7 +1,7 @@
 """
 This file compiles the code in Web Browser Engineering,
 up to and including Chapter 4 (Constructing a Document Tree),
-without exercises.
+Including exercises implemented by Tal Langus.
 """
 
 import wbetools
@@ -47,7 +47,9 @@ class HTMLParser:
     def __init__(self, body):
         self.body = body
         self.unfinished = []
-        self.body_index = 0  # New property to track position
+        self.unfinished_format_tags = []
+        self.misnested_format_tags = []
+        self.body_index = 0  
 
     def parse(self):
         text = ""
@@ -170,16 +172,24 @@ class HTMLParser:
         "link", "meta", "param", "source", "track", "wbr",
     ]
 
+    FORMATTING_TAGS = ['i', 'b', 'small', 'big', 'pre']
+
     def add_tag(self, tag):
         tag, attributes = self.get_attributes(tag)
         if tag.startswith("!"): return
         self.implicit_tags(tag)
+
+        if tag.startswith("/") and tag[1:] in self.FORMATTING_TAGS:
+            self.handle_misnested_formatting(tag[1:])
+            return
 
         if tag.startswith("/"):
             if len(self.unfinished) == 1: return
             node = self.unfinished.pop()
             parent = self.unfinished[-1]
             parent.children.append(node)
+            if self.is_top_formatting_node(node):
+                self.unfinished_format_tags.pop()
         elif tag in self.SELF_CLOSING_TAGS:
             parent = self.unfinished[-1]
             node = Element(tag, attributes, parent)
@@ -188,6 +198,39 @@ class HTMLParser:
             parent = self.unfinished[-1] if self.unfinished else None
             node = Element(tag, attributes, parent)
             self.unfinished.append(node)
+            if tag in self.FORMATTING_TAGS:
+                self.unfinished_format_tags.append(node)
+
+    def is_top_formatting_node(self, node):
+        return (
+            node.tag in self.FORMATTING_TAGS and
+            self.unfinished_format_tags and
+            self.unfinished_format_tags[-1] == node
+        )
+
+    def handle_misnested_formatting(self, tag):
+        for i in range(len(self.unfinished_format_tags) - 1, -1, -1):
+            node = self.unfinished_format_tags[i]
+            if node.tag == tag:
+                # Close all formatting tags above this one
+                to_reopen = []
+                while len(self.unfinished_format_tags) - 1 > i:
+                    misnested_node = self.unfinished_format_tags.pop()
+                    if misnested_node in self.unfinished:
+                        self.unfinished.remove(misnested_node)
+                        parent = misnested_node.parent
+                        if parent:
+                            parent.children.append(misnested_node)
+                    to_reopen.append(misnested_node.tag)
+                matching_node = self.unfinished_format_tags.pop()
+                if matching_node in self.unfinished:
+                    self.unfinished.remove(matching_node)
+                    parent = matching_node.parent
+                    if parent:
+                        parent.children.append(matching_node)
+                for reopen_tag in reversed(to_reopen):
+                    self.add_tag(reopen_tag)
+                return
 
     HEAD_TAGS = [
         "base", "basefont", "bgsound", "noscript",
@@ -343,6 +386,5 @@ class Browser:
 
 if __name__ == "__main__":
     import sys
-    # Browser().load(URL(sys.argv[1]))
-    Browser().load(URL('view-source:file:///Users/li016390/Desktop/challenges/test.html'))
+    Browser().load(URL(sys.argv[1]))
     tkinter.mainloop()

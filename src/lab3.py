@@ -1,7 +1,7 @@
 """
 This file compiles the code in Web Browser Engineering,
 up to and including Chapter 3 (Formatting Text),
-without exercises.
+Including exercises implemented by Tal Langus.
 """
 
 import wbetools
