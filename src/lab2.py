@@ -146,9 +146,9 @@ class Browser:
 
     def on_mousewheel(self, event):
         if event.delta > 0:
-            self.scrollup()
+            self.scrollup(event)
         else:
-            self.scrolldown()
+            self.scrolldown(event)
 
     def on_resize(self, event):
         self.width = event.width
@@ -160,6 +160,5 @@ class Browser:
 
 if __name__ == "__main__":
     import sys
-
     Browser().load(URL(sys.argv[1]))
     tkinter.mainloop()
