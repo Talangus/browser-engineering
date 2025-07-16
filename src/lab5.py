@@ -23,6 +23,9 @@ BLOCK_ELEMENTS = [
     "legend", "details", "summary"
 ]
 
+INDENT_PX = 20  
+BULLET_SIZE = 8
+
 @wbetools.patch(Layout)
 class BlockLayout:
     def __init__(self, node, parent, previous):
@@ -41,6 +44,10 @@ class BlockLayout:
 
         self.x = self.parent.x
         self.width = self.parent.width
+
+        if isinstance(self.node, Element) and self.node.tag == "li":
+            self.x += INDENT_PX
+            self.width -= INDENT_PX
 
         if self.previous:
             self.y = self.previous.y + self.previous.height
@@ -120,10 +127,22 @@ class BlockLayout:
             rect = DrawRect(self.x, self.y, x2, y2, "gray")
             cmds.append(rect)
 
-        if isinstance(self.node, Element) and self.node.tag == "nav" and\
+        elif isinstance(self.node, Element) and self.node.tag == "nav" and\
             has_attribute(self.node, "class", "links"):
             x2, y2 = self.x + self.width, self.y + self.height
             rect = DrawRect(self.x, self.y, x2, y2, "#e0e0e0")  # light gray
+            cmds.append(rect)
+        
+        elif isinstance(self.node, Element) and self.node.tag == "li":
+            bullet_x = self.x - INDENT_PX + 4  
+            bullet_y = self.y + 4  
+            rect = DrawRect(
+                bullet_x,
+                bullet_y,
+                bullet_x + BULLET_SIZE,
+                bullet_y + BULLET_SIZE,
+                "black"
+            )
             cmds.append(rect)
 
         if self.layout_mode() == "inline":
@@ -238,7 +257,8 @@ class Browser:
         self.draw()
 
 if __name__ == "__main__":
-    import sys
+    import sys 
     # Browser().load(URL(sys.argv[1]))
-    Browser().load(URL('https://browser.engineering/layout.html'))
+    # Browser().load(URL('https://browser.engineering/layout.html'))
+    Browser().load(URL('file:///Users/li016390/Desktop/challenges/test.html'))
     tkinter.mainloop()
