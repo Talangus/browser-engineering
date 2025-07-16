@@ -23,8 +23,11 @@ BLOCK_ELEMENTS = [
     "legend", "details", "summary"
 ]
 
+LIST_ELEMENTS= ["ul", "ol", "menu"]
+
 INDENT_PX = 20  
 BULLET_SIZE = 8
+TOC_HEADER_HEIGHT = 24
 
 @wbetools.patch(Layout)
 class BlockLayout:
@@ -41,7 +44,7 @@ class BlockLayout:
 
     def layout(self):
         wbetools.record("layout_pre", self)
-
+        height_offset = 0
         self.x = self.parent.x
         self.width = self.parent.width
 
@@ -53,6 +56,11 @@ class BlockLayout:
             self.y = self.previous.y + self.previous.height
         else:
             self.y = self.parent.y
+
+        if isinstance(self.node, Element) and self.node.tag in LIST_ELEMENTS and\
+            is_toc_nav_element(self.node.parent):
+            self.y += TOC_HEADER_HEIGHT
+            height_offset = TOC_HEADER_HEIGHT
 
         mode = self.layout_mode()
         if mode == "block":
@@ -80,7 +88,7 @@ class BlockLayout:
 
         if mode == "block":
             self.height = sum([
-                child.height for child in self.children])
+                child.height for child in self.children]) + height_offset
         else:
             self.height = self.cursor_y
 
@@ -126,6 +134,16 @@ class BlockLayout:
             x2, y2 = self.x + self.width, self.y + self.height
             rect = DrawRect(self.x, self.y, x2, y2, "gray")
             cmds.append(rect)
+
+        elif is_toc_nav_element(self.node):
+            header_color = "#cccccc"
+            rect = DrawRect(self.x, self.y, self.x + self.width, self.y + TOC_HEADER_HEIGHT, header_color)
+            cmds.append(rect)
+            
+            font = get_font(14, "bold", "roman")
+            text_x = self.x + 8
+            text_y = self.y + 4
+            cmds.append(DrawText(text_x, text_y, "Table of Contents", font))
 
         elif isinstance(self.node, Element) and self.node.tag == "nav" and\
             has_attribute(self.node, "class", "links"):
@@ -231,6 +249,9 @@ def paint_tree(layout_object, display_list):
 def has_attribute(html_node, attr_name, attr_value):
     return attr_name in html_node.attributes and\
         html_node.attributes[attr_name] == attr_value
+
+def is_toc_nav_element(node):
+    return isinstance(node, Element) and node.tag == "nav" and has_attribute(node, "id", "toc")
     
 
 @wbetools.patch(Browser)
@@ -259,6 +280,6 @@ class Browser:
 if __name__ == "__main__":
     import sys 
     # Browser().load(URL(sys.argv[1]))
-    # Browser().load(URL('https://browser.engineering/layout.html'))
-    Browser().load(URL('file:///Users/li016390/Desktop/challenges/test.html'))
+    Browser().load(URL('https://browser.engineering/layout.html'))
+    # Browser().load(URL('file:///Users/li016390/Desktop/challenges/test.html'))
     tkinter.mainloop()
