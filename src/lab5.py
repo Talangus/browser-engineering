@@ -60,6 +60,7 @@ class BlockLayout:
             self.weight = "normal"
             self.style = "roman"
             self.size = 12
+            self.in_pre = False
 
             self.line = []
             self.recurse(self.node)
@@ -115,6 +116,12 @@ class BlockLayout:
         if isinstance(self.node, Element) and self.node.tag == "pre":
             x2, y2 = self.x + self.width, self.y + self.height
             rect = DrawRect(self.x, self.y, x2, y2, "gray")
+            cmds.append(rect)
+
+        if isinstance(self.node, Element) and self.node.tag == "nav" and\
+            has_attribute(self.node, "class", "links"):
+            x2, y2 = self.x + self.width, self.y + self.height
+            rect = DrawRect(self.x, self.y, x2, y2, "#e0e0e0")  # light gray
             cmds.append(rect)
 
         if self.layout_mode() == "inline":
@@ -200,6 +207,11 @@ def paint_tree(layout_object, display_list):
     for child in layout_object.children:
         paint_tree(child, display_list)
 
+def has_attribute(html_node, attr_name, attr_value):
+    return attr_name in html_node.attributes and\
+        html_node.attributes[attr_name] == attr_value
+    
+
 @wbetools.patch(Browser)
 class Browser:
     def load(self, url):
@@ -225,5 +237,6 @@ class Browser:
 
 if __name__ == "__main__":
     import sys
-    Browser().load(URL(sys.argv[1]))
+    # Browser().load(URL(sys.argv[1]))
+    Browser().load(URL('https://browser.engineering/layout.html'))
     tkinter.mainloop()
