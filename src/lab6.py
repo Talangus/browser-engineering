@@ -215,7 +215,8 @@ class BlockLayout:
         style = node.style["font-style"]
         if style == "normal": style = "roman"
         size = int(float(node.style["font-size"][:-2]) * .75)
-        font = get_font(size, weight, style)
+        family = node.style.get("font-family")
+        font = get_font(size, weight, style, family)
 
         w = font.measure(word)
         if self.cursor_x + w > self.width:
@@ -294,6 +295,8 @@ class Browser:
 
         self.scroll = 0
         self.window.bind("<Down>", self.scrolldown)
+        self.window.bind("<Up>", self.scrollup)
+        self.window.bind("<MouseWheel>", self.on_mousewheel)
         self.display_list = []
 
     def load(self, url):
@@ -324,5 +327,7 @@ class Browser:
 
 if __name__ == "__main__":
     import sys
-    Browser().load(URL(sys.argv[1]))
+    # Browser().load(URL(sys.argv[1]))
+    # Browser().load(URL('https://browser.engineering/styles.html'))
+    Browser().load(URL('file:///Users/li016390/Desktop/challenges/test.html'))
     tkinter.mainloop()
