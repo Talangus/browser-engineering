@@ -1,7 +1,7 @@
 """
 This file compiles the code in Web Browser Engineering,
 up to and including Chapter 5 (Laying out Pages),
-without exercises.
+Including exercises implemented by Tal Langus.
 """
 
 import wbetools
@@ -23,6 +23,12 @@ BLOCK_ELEMENTS = [
     "legend", "details", "summary"
 ]
 
+LIST_ELEMENTS= ["ul", "ol", "menu"]
+
+INDENT_PX = 20  
+BULLET_SIZE = 8
+TOC_HEADER_HEIGHT = 24
+
 @wbetools.patch(Layout)
 class BlockLayout:
     def __init__(self, node, parent, previous):
@@ -38,19 +44,30 @@ class BlockLayout:
 
     def layout(self):
         wbetools.record("layout_pre", self)
-
+        height_offset = 0
         self.x = self.parent.x
         self.width = self.parent.width
+
+        if isinstance(self.node, Element) and self.node.tag == "li":
+            self.x += INDENT_PX
+            self.width -= INDENT_PX
 
         if self.previous:
             self.y = self.previous.y + self.previous.height
         else:
             self.y = self.parent.y
 
+        if isinstance(self.node, Element) and self.node.tag in LIST_ELEMENTS and\
+            is_toc_nav_element(self.node.parent):
+            self.y += TOC_HEADER_HEIGHT
+            height_offset = TOC_HEADER_HEIGHT
+
         mode = self.layout_mode()
         if mode == "block":
             previous = None
             for child in self.node.children:
+                if isinstance(child, Element) and child.tag == "head":
+                    continue
                 next = BlockLayout(child, self, previous)
                 self.children.append(next)
                 previous = next
@@ -60,6 +77,7 @@ class BlockLayout:
             self.weight = "normal"
             self.style = "roman"
             self.size = 12
+            self.in_pre = False
 
             self.line = []
             self.recurse(self.node)
@@ -70,7 +88,7 @@ class BlockLayout:
 
         if mode == "block":
             self.height = sum([
-                child.height for child in self.children])
+                child.height for child in self.children]) + height_offset
         else:
             self.height = self.cursor_y
 
@@ -115,6 +133,34 @@ class BlockLayout:
         if isinstance(self.node, Element) and self.node.tag == "pre":
             x2, y2 = self.x + self.width, self.y + self.height
             rect = DrawRect(self.x, self.y, x2, y2, "gray")
+            cmds.append(rect)
+
+        elif is_toc_nav_element(self.node):
+            header_color = "#cccccc"
+            rect = DrawRect(self.x, self.y, self.x + self.width, self.y + TOC_HEADER_HEIGHT, header_color)
+            cmds.append(rect)
+            
+            font = get_font(14, "bold", "roman")
+            text_x = self.x + 8
+            text_y = self.y + 4
+            cmds.append(DrawText(text_x, text_y, "Table of Contents", font))
+
+        elif isinstance(self.node, Element) and self.node.tag == "nav" and\
+            has_attribute(self.node, "class", "links"):
+            x2, y2 = self.x + self.width, self.y + self.height
+            rect = DrawRect(self.x, self.y, x2, y2, "#e0e0e0")  # light gray
+            cmds.append(rect)
+        
+        elif isinstance(self.node, Element) and self.node.tag == "li":
+            bullet_x = self.x - INDENT_PX + 4  
+            bullet_y = self.y + 4  
+            rect = DrawRect(
+                bullet_x,
+                bullet_y,
+                bullet_x + BULLET_SIZE,
+                bullet_y + BULLET_SIZE,
+                "black"
+            )
             cmds.append(rect)
 
         if self.layout_mode() == "inline":
@@ -200,6 +246,14 @@ def paint_tree(layout_object, display_list):
     for child in layout_object.children:
         paint_tree(child, display_list)
 
+def has_attribute(html_node, attr_name, attr_value):
+    return attr_name in html_node.attributes and\
+        html_node.attributes[attr_name] == attr_value
+
+def is_toc_nav_element(node):
+    return isinstance(node, Element) and node.tag == "nav" and has_attribute(node, "id", "toc")
+    
+
 @wbetools.patch(Browser)
 class Browser:
     def load(self, url):
@@ -224,6 +278,6 @@ class Browser:
         self.draw()
 
 if __name__ == "__main__":
-    import sys
+    import sys 
     Browser().load(URL(sys.argv[1]))
     tkinter.mainloop()
