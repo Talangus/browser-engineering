@@ -1,7 +1,7 @@
 """
 This file compiles the code in Web Browser Engineering,
 up to and including Chapter 5 (Laying out Pages),
-without exercises.
+Including exercises implemented by Tal Langus.
 """
 
 import wbetools
@@ -279,7 +279,5 @@ class Browser:
 
 if __name__ == "__main__":
     import sys 
-    # Browser().load(URL(sys.argv[1]))
-    Browser().load(URL('https://browser.engineering/layout.html'))
-    # Browser().load(URL('file:///Users/li016390/Desktop/challenges/test.html'))
+    Browser().load(URL(sys.argv[1]))
     tkinter.mainloop()
