@@ -46,7 +46,11 @@ class BlockLayout:
         wbetools.record("layout_pre", self)
         height_offset = 0
         self.x = self.parent.x
-        self.width = self.parent.width
+
+        width = self.node.style.get("width", "auto")
+        if width.endswith("px"):
+            self.width = int(width[:-2])
+        else: self.width = self.parent.width
 
         if isinstance(self.node, Element) and self.node.tag == "li":
             self.x += INDENT_PX
@@ -85,12 +89,17 @@ class BlockLayout:
 
         for child in self.children:
             child.layout()
+        
 
-        if mode == "block":
-            self.height = sum([
-                child.height for child in self.children]) + height_offset
+        height = self.node.style.get("height", "auto")
+        if height.endswith("px"):
+            self.height = int(height[:-2])
         else:
-            self.height = self.cursor_y
+            if mode == "block":
+                self.height = sum([
+                    child.height for child in self.children]) + height_offset
+            else:
+                self.height = self.cursor_y
 
         wbetools.record("layout_post", self)
 

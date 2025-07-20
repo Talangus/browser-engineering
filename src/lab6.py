@@ -101,11 +101,12 @@ class CSSParser:
         return pairs
 
     def selector(self):
-        out = TagSelector(self.word().casefold())
+        word = self.word()
+        out = get_discrete_selector(word.casefold())
         self.whitespace()
         while self.i < len(self.s) and self.s[self.i] != "{":
-            tag = self.word()
-            descendant = TagSelector(tag.casefold())
+            word = self.word()
+            descendant = get_discrete_selector(word.casefold())
             out = DescendantSelector(out, descendant)
             self.whitespace()
         return out
@@ -142,6 +143,27 @@ class TagSelector:
     def __repr__(self):
         return "TagSelector(tag={}, priority={})".format(
             self.tag, self.priority)
+
+class ClassSelector:
+    def __init__(self, class_name):
+        self.class_name = class_name
+        self.priority = 10  
+
+    def matches(self, node):
+        if not isinstance(node, Element): return False
+        classes = node.attributes.get("class", "").split()
+        return self.class_name in classes
+
+    @wbetools.js_hide
+    def __repr__(self):
+        return "ClassSelector(class_name={}, priority={})".format(
+            self.class_name, self.priority)
+
+def get_discrete_selector(word):
+    if word.startswith("."):
+        return ClassSelector(word[1:])
+    else:
+        return TagSelector(word.casefold())
 
 class DescendantSelector:
     def __init__(self, ancestor, descendant):
