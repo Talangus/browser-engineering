@@ -327,6 +327,7 @@ class Browser:
         self.nodes = HTMLParser(body).parse()
 
         rules = DEFAULT_STYLE_SHEET.copy()
+        
         links = [node.attributes["href"]
                  for node in tree_to_list(self.nodes, [])
                  if isinstance(node, Element)
@@ -340,6 +341,15 @@ class Browser:
             except:
                 continue
             rules.extend(CSSParser(body).parse())
+        
+        inline_stlyes = [node
+                 for node in tree_to_list(self.nodes, [])
+                 if isinstance(node, Element)
+                 and node.tag == "style"]
+        for node in inline_stlyes:
+            text = node.children[0].text
+            rules.extend(CSSParser(text).parse())
+        
         style(self.nodes, sorted(rules, key=cascade_priority))
 
         self.document = DocumentLayout(self.nodes)
