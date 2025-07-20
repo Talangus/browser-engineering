@@ -14,15 +14,6 @@ from lab2 import WIDTH, HEIGHT, HSTEP, VSTEP, SCROLL_STEP
 from lab3 import FONTS, get_font
 from lab4 import Text, Element, print_tree, HTMLParser, Layout, Browser
 
-BLOCK_ELEMENTS = [
-    "html", "body", "article", "section", "nav", "aside",
-    "h1", "h2", "h3", "h4", "h5", "h6", "hgroup", "header",
-    "footer", "address", "p", "hr", "pre", "blockquote",
-    "ol", "ul", "menu", "li", "dl", "dt", "dd", "figure",
-    "figcaption", "main", "div", "table", "form", "fieldset",
-    "legend", "details", "summary"
-]
-
 LIST_ELEMENTS= ["ul", "ol", "menu"]
 
 INDENT_PX = 20  
@@ -107,7 +98,7 @@ class BlockLayout:
         if isinstance(self.node, Text):
             return "inline"
         elif any([isinstance(child, Element) and \
-                  child.tag in BLOCK_ELEMENTS
+                  child.style['display'] == 'block'
                   for child in self.node.children]):
             return "block"
         elif self.node.children:

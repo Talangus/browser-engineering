@@ -13,7 +13,7 @@ from lab1 import URL
 from lab2 import WIDTH, HEIGHT, HSTEP, VSTEP, SCROLL_STEP
 from lab3 import FONTS, get_font
 from lab4 import Text, Element, print_tree, HTMLParser
-from lab5 import BLOCK_ELEMENTS, DrawRect, DrawText, paint_tree
+from lab5 import DrawRect, DrawText, paint_tree
 from lab5 import BlockLayout, DocumentLayout, Browser
 import wbetools
 
@@ -188,6 +188,7 @@ INHERITED_PROPERTIES = {
     "font-style": "normal",
     "font-weight": "normal",
     "color": "black",
+    "display": "inline",
 }
 
 def style(node, rules):
