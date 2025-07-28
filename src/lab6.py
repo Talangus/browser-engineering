@@ -57,6 +57,9 @@ class CSSParser:
 
     def word(self):
         start = self.i
+        if self.i < len(self.s) and self.s[self.i] == ':':
+            self.i += 1
+        
         while self.i < len(self.s):
             if self.s[self.i].isalnum() or self.s[self.i] in "#-.%":
                 self.i += 1
@@ -106,10 +109,24 @@ class CSSParser:
         self.whitespace()
         while self.i < len(self.s) and self.s[self.i] != "{":
             word = self.word()
+            
+            if word == ':has':
+                out = self.get_has_selector(out)
+                while self.s[self.i] != "{":
+                    self.i +=1
+                break
             descendant = get_discrete_selector(word.casefold())
             out = DescendantSelector(out, descendant)
             self.whitespace()
         return out
+
+    def get_has_selector(self, ancestor_selector):
+        left_parenthesis = self.s[self.i:].index('(')
+        right_parenthesis = self.s[self.i:].index(')')
+        descendant_selector = CSSParser(self.s[self.i + left_parenthesis + 1:self.i + right_parenthesis]).selector()
+        return HasSelector(ancestor_selector, descendant_selector)
+
+        
 
     def parse(self):
         rules = []
@@ -159,6 +176,27 @@ class ClassSelector:
         return "ClassSelector(class_name={}, priority={})".format(
             self.class_name, self.priority)
 
+class HasSelector:
+    def __init__(self, ancestor_selector, descendant_selector):
+        self.ancestor_selector = ancestor_selector
+        self.descendant_selector = descendant_selector
+        self.priority = 15
+
+    def ancestor_matches(self, node):
+        if self.ancestor_selector.matches(node):
+            if  not hasattr(node,'pending_css_rules'):
+                node.pending_css_rules = {}
+            
+            return True
+
+        return False
+
+
+    @wbetools.js_hide
+    def __repr__(self):
+        return "HasSelector(selector_list={}, priority={})".format(
+            self.selector_list, self.priority)
+
 def get_discrete_selector(word):
     if word.startswith("."):
         return ClassSelector(word[1:])
@@ -188,24 +226,34 @@ INHERITED_PROPERTIES = {
     "font-style": "normal",
     "font-weight": "normal",
     "color": "black",
-    "display": "inline",
 }
 
-def style(node, rules):
+def style(node, rules, pending_rules={}):
     node.style = {}
+    
     for property, default_value in INHERITED_PROPERTIES.items():
         if node.parent:
             node.style[property] = node.parent.style[property]
         else:
             node.style[property] = default_value
+    node.style["display"] = "inline"
+    
     for selector, body in rules:
-        if not selector.matches(node): continue
-        for property, value in body.items():
-            node.style[property] = value
+        if isinstance(selector, HasSelector):
+            if selector.ancestor_matches(node):
+                pending_rule = {"selector": selector.descendant_selector,
+                                "body": body,
+                                "satisfied": False}
+                node.pending_css_rules[str(id(pending_rule))] = pending_rule
+        elif selector.matches(node): 
+            for property, value in body.items():
+                node.style[property] = value
+    
     if isinstance(node, Element) and "style" in node.attributes:
         pairs = CSSParser(node.attributes["style"]).body()
         for property, value in pairs.items():
             node.style[property] = value
+    
     if node.style["font-size"].endswith("%"):
         if node.parent:
             parent_font_size = node.parent.style["font-size"]
@@ -214,8 +262,25 @@ def style(node, rules):
         node_pct = float(node.style["font-size"][:-1]) / 100
         parent_px = float(parent_font_size[:-2])
         node.style["font-size"] = str(node_pct * parent_px) + "px"
+
+    for rule_id in pending_rules:
+        curr_rule = pending_rules[rule_id]
+        if not curr_rule["satisfied"] and curr_rule["selector"].matches(node):
+            curr_rule["satisfied"] = True
+    
+    if hasattr(node, "pending_css_rules"):
+        pending_rules = node.pending_css_rules | pending_rules
+
     for child in node.children:
-        style(child, rules)
+        pending_rules = pending_rules | style(child, rules, pending_rules)
+
+    if hasattr(node, "pending_css_rules"):
+        for rule_id in node.pending_css_rules:
+            if pending_rules[rule_id]["satisfied"]:
+                for property, value in pending_rules[rule_id]["body"].items():
+                    node.style[property] = value
+
+    return pending_rules
 
 def cascade_priority(rule):
     selector, body = rule
@@ -360,7 +425,5 @@ class Browser:
 
 if __name__ == "__main__":
     import sys
-    # Browser().load(URL(sys.argv[1]))
-    # Browser().load(URL('https://browser.engineering/styles.html'))
-    Browser().load(URL('file:///Users/li016390/Desktop/challenges/test.html'))
+    Browser().load(URL(sys.argv[1]))
     tkinter.mainloop()
