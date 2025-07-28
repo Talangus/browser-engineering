@@ -13,7 +13,7 @@ from lab1 import URL
 from lab2 import WIDTH, HEIGHT, HSTEP, VSTEP, SCROLL_STEP
 from lab3 import FONTS, get_font
 from lab4 import Text, Element, print_tree, HTMLParser
-from lab5 import BLOCK_ELEMENTS, DrawRect, DrawText, paint_tree
+from lab5 import DrawRect, DrawText, paint_tree
 from lab5 import BlockLayout, DocumentLayout, Browser
 import wbetools
 
@@ -57,6 +57,9 @@ class CSSParser:
 
     def word(self):
         start = self.i
+        if self.i < len(self.s) and self.s[self.i] == ':':
+            self.i += 1
+        
         while self.i < len(self.s):
             if self.s[self.i].isalnum() or self.s[self.i] in "#-.%":
                 self.i += 1
@@ -101,14 +104,29 @@ class CSSParser:
         return pairs
 
     def selector(self):
-        out = TagSelector(self.word().casefold())
+        word = self.word()
+        out = get_discrete_selector(word.casefold())
         self.whitespace()
         while self.i < len(self.s) and self.s[self.i] != "{":
-            tag = self.word()
-            descendant = TagSelector(tag.casefold())
+            word = self.word()
+            
+            if word == ':has':
+                out = self.get_has_selector(out)
+                while self.s[self.i] != "{":
+                    self.i +=1
+                break
+            descendant = get_discrete_selector(word.casefold())
             out = DescendantSelector(out, descendant)
             self.whitespace()
         return out
+
+    def get_has_selector(self, ancestor_selector):
+        left_parenthesis = self.s[self.i:].index('(')
+        right_parenthesis = self.s[self.i:].index(')')
+        descendant_selector = CSSParser(self.s[self.i + left_parenthesis + 1:self.i + right_parenthesis]).selector()
+        return HasSelector(ancestor_selector, descendant_selector)
+
+        
 
     def parse(self):
         rules = []
@@ -143,6 +161,48 @@ class TagSelector:
         return "TagSelector(tag={}, priority={})".format(
             self.tag, self.priority)
 
+class ClassSelector:
+    def __init__(self, class_name):
+        self.class_name = class_name
+        self.priority = 10  
+
+    def matches(self, node):
+        if not isinstance(node, Element): return False
+        classes = node.attributes.get("class", "").split()
+        return self.class_name in classes
+
+    @wbetools.js_hide
+    def __repr__(self):
+        return "ClassSelector(class_name={}, priority={})".format(
+            self.class_name, self.priority)
+
+class HasSelector:
+    def __init__(self, ancestor_selector, descendant_selector):
+        self.ancestor_selector = ancestor_selector
+        self.descendant_selector = descendant_selector
+        self.priority = 15
+
+    def ancestor_matches(self, node):
+        if self.ancestor_selector.matches(node):
+            if  not hasattr(node,'pending_css_rules'):
+                node.pending_css_rules = {}
+            
+            return True
+
+        return False
+
+
+    @wbetools.js_hide
+    def __repr__(self):
+        return "HasSelector(selector_list={}, priority={})".format(
+            self.selector_list, self.priority)
+
+def get_discrete_selector(word):
+    if word.startswith("."):
+        return ClassSelector(word[1:])
+    else:
+        return TagSelector(word.casefold())
+
 class DescendantSelector:
     def __init__(self, ancestor, descendant):
         self.ancestor = ancestor
@@ -168,21 +228,32 @@ INHERITED_PROPERTIES = {
     "color": "black",
 }
 
-def style(node, rules):
+def style(node, rules, pending_rules={}):
     node.style = {}
+    
     for property, default_value in INHERITED_PROPERTIES.items():
         if node.parent:
             node.style[property] = node.parent.style[property]
         else:
             node.style[property] = default_value
+    node.style["display"] = "inline"
+    
     for selector, body in rules:
-        if not selector.matches(node): continue
-        for property, value in body.items():
-            node.style[property] = value
+        if isinstance(selector, HasSelector):
+            if selector.ancestor_matches(node):
+                pending_rule = {"selector": selector.descendant_selector,
+                                "body": body,
+                                "satisfied": False}
+                node.pending_css_rules[str(id(pending_rule))] = pending_rule
+        elif selector.matches(node): 
+            for property, value in body.items():
+                node.style[property] = value
+    
     if isinstance(node, Element) and "style" in node.attributes:
         pairs = CSSParser(node.attributes["style"]).body()
         for property, value in pairs.items():
             node.style[property] = value
+    
     if node.style["font-size"].endswith("%"):
         if node.parent:
             parent_font_size = node.parent.style["font-size"]
@@ -191,8 +262,25 @@ def style(node, rules):
         node_pct = float(node.style["font-size"][:-1]) / 100
         parent_px = float(parent_font_size[:-2])
         node.style["font-size"] = str(node_pct * parent_px) + "px"
+
+    for rule_id in pending_rules:
+        curr_rule = pending_rules[rule_id]
+        if not curr_rule["satisfied"] and curr_rule["selector"].matches(node):
+            curr_rule["satisfied"] = True
+    
+    if hasattr(node, "pending_css_rules"):
+        pending_rules = node.pending_css_rules | pending_rules
+
     for child in node.children:
-        style(child, rules)
+        pending_rules = pending_rules | style(child, rules, pending_rules)
+
+    if hasattr(node, "pending_css_rules"):
+        for rule_id in node.pending_css_rules:
+            if pending_rules[rule_id]["satisfied"]:
+                for property, value in pending_rules[rule_id]["body"].items():
+                    node.style[property] = value
+
+    return pending_rules
 
 def cascade_priority(rule):
     selector, body = rule
@@ -215,7 +303,8 @@ class BlockLayout:
         style = node.style["font-style"]
         if style == "normal": style = "roman"
         size = int(float(node.style["font-size"][:-2]) * .75)
-        font = get_font(size, weight, style)
+        family = node.style.get("font-family")
+        font = get_font(size, weight, style, family)
 
         w = font.measure(word)
         if self.cursor_x + w > self.width:
@@ -294,6 +383,8 @@ class Browser:
 
         self.scroll = 0
         self.window.bind("<Down>", self.scrolldown)
+        self.window.bind("<Up>", self.scrollup)
+        self.window.bind("<MouseWheel>", self.on_mousewheel)
         self.display_list = []
 
     def load(self, url):
@@ -301,6 +392,7 @@ class Browser:
         self.nodes = HTMLParser(body).parse()
 
         rules = DEFAULT_STYLE_SHEET.copy()
+        
         links = [node.attributes["href"]
                  for node in tree_to_list(self.nodes, [])
                  if isinstance(node, Element)
@@ -314,6 +406,15 @@ class Browser:
             except:
                 continue
             rules.extend(CSSParser(body).parse())
+        
+        inline_stlyes = [node
+                 for node in tree_to_list(self.nodes, [])
+                 if isinstance(node, Element)
+                 and node.tag == "style"]
+        for node in inline_stlyes:
+            text = node.children[0].text
+            rules.extend(CSSParser(text).parse())
+        
         style(self.nodes, sorted(rules, key=cascade_priority))
 
         self.document = DocumentLayout(self.nodes)

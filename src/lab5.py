@@ -14,15 +14,6 @@ from lab2 import WIDTH, HEIGHT, HSTEP, VSTEP, SCROLL_STEP
 from lab3 import FONTS, get_font
 from lab4 import Text, Element, print_tree, HTMLParser, Layout, Browser
 
-BLOCK_ELEMENTS = [
-    "html", "body", "article", "section", "nav", "aside",
-    "h1", "h2", "h3", "h4", "h5", "h6", "hgroup", "header",
-    "footer", "address", "p", "hr", "pre", "blockquote",
-    "ol", "ul", "menu", "li", "dl", "dt", "dd", "figure",
-    "figcaption", "main", "div", "table", "form", "fieldset",
-    "legend", "details", "summary"
-]
-
 LIST_ELEMENTS= ["ul", "ol", "menu"]
 
 INDENT_PX = 20  
@@ -46,7 +37,11 @@ class BlockLayout:
         wbetools.record("layout_pre", self)
         height_offset = 0
         self.x = self.parent.x
-        self.width = self.parent.width
+
+        width = self.node.style.get("width", "auto")
+        if width.endswith("px"):
+            self.width = int(width[:-2])
+        else: self.width = self.parent.width
 
         if isinstance(self.node, Element) and self.node.tag == "li":
             self.x += INDENT_PX
@@ -85,12 +80,17 @@ class BlockLayout:
 
         for child in self.children:
             child.layout()
+        
 
-        if mode == "block":
-            self.height = sum([
-                child.height for child in self.children]) + height_offset
+        height = self.node.style.get("height", "auto")
+        if height.endswith("px"):
+            self.height = int(height[:-2])
         else:
-            self.height = self.cursor_y
+            if mode == "block":
+                self.height = sum([
+                    child.height for child in self.children]) + height_offset
+            else:
+                self.height = self.cursor_y
 
         wbetools.record("layout_post", self)
 
@@ -98,7 +98,7 @@ class BlockLayout:
         if isinstance(self.node, Text):
             return "inline"
         elif any([isinstance(child, Element) and \
-                  child.tag in BLOCK_ELEMENTS
+                  child.style['display'] == 'block'
                   for child in self.node.children]):
             return "block"
         elif self.node.children:
